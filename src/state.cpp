@@ -4,6 +4,7 @@
 
 GameState::GameState()
 	: signon_state(SignonState::None)
+	, connected{}
 	, level_buffer{}
 	, local_entity{}
 	, max_clients{}
@@ -13,38 +14,90 @@ GameState::GameState()
 	, entities(new std::unique_ptr<BaseEntity>[NUM_ENT_ENTRIES]())
 	, ent_info(new CEntInfo[NUM_ENT_ENTRIES]())
 	, prev_info(new CEntInfo[NUM_ENT_ENTRIES]())
+	, player_names(new std::string[MAX_PLAYERS]())
+	, player_ptrs1(new NameEntry[MAX_PLAYERS]())
+	, player_ptrs2(new NameEntry[MAX_PLAYERS]())
+	, weapon_names{}
 {}
 
-void GameState::update(const GameProcess& process, const GameData& data) {
-	process.read(process.r5apex_exe + data.signon_state, signon_state);
-	process.read(process.r5apex_exe + data.level_name, level_buffer);
-	process.read(process.r5apex_exe + data.local_entity, local_entity);
+void load_string_table(std::vector<std::string>& names, const GameProcess& process, uint32_t offset) {
+	uint64_t table_ptr;
+	if (!process.read(process.r5apex_exe + offset, table_ptr)) {
+		return;
+	}
+	CNetStringTable table;
+	if (!process.read(table_ptr, table)) {
+		return;
+	}
+	CNetStringDict dict;
+	if (!process.read(table.items, dict)) {
+		return;
+	}
+	names.resize(dict.used);
+	char buffer[64];
+	CNetStringTableItem item;
+	for (size_t i = 0; i < dict.used; i += 1) {
+		names[i].clear();
+		if (process.read(dict.elements + i * 72, item) && process.read(item.string, buffer)) {
+			names[i].append(buffer);
+		}
+	}
+}
+
+void GameState::update(const GameProcess& process) {
+	auto old_signon_state = signon_state;
+
+	process.read(process.r5apex_exe + data::CLIENT_STATE + data::CLIENT_SIGNON_STATE, signon_state);
+	process.read(process.r5apex_exe + data::CLIENT_STATE + data::CLIENT_LEVEL_NAME, level_buffer);
+	process.read(process.r5apex_exe + data::LOCAL_ENTITY, local_entity);
+
+	connected = old_signon_state != SignonState::Full && signon_state == SignonState::Full;
 
 	uint64_t view_render_ptr, view_matrix_ptr;
-	if (process.read(process.r5apex_exe + data.view_render, view_render_ptr)) {
-		if (process.read(view_render_ptr + data.view_matrix, view_matrix_ptr)) {
+	if (process.read(process.r5apex_exe + data::VIEW_RENDER, view_render_ptr)) {
+		if (process.read(view_render_ptr + data::VIEW_MATRIX, view_matrix_ptr)) {
 			process.read(view_matrix_ptr, view_matrix);
 		}
 	}
 
 	CGlobalVars global_vars;
-	if (process.read(process.r5apex_exe + data.global_vars, global_vars)) {
+	FloatInt temp[20];
+	process.read(process.r5apex_exe + data::GLOBAL_VARS, temp);
+	if (process.read(process.r5apex_exe + data::GLOBAL_VARS, global_vars)) {
 		max_clients = global_vars.maxClients;
 		curtime = global_vars.curtime;
+		interval_per_tick = global_vars.interval_per_tick;
 	}
 
-	process.read(process.r5apex_exe + data.input_system + data.input_button_state, button_state);
+	process.read(process.r5apex_exe + data::INPUT_SYSTEM + data::INPUT_BUTTON_STATE, button_state);
 
-	if (process.read_array(process.r5apex_exe + data.entity_list, prev_info.get(), NUM_ENT_ENTRIES)) {
+	if (process.read_array(process.r5apex_exe + data::ENTITY_LIST, prev_info.get(), NUM_ENT_ENTRIES)) {
 		std::swap(prev_info, ent_info);
 		for (uint32_t i = 0; i < NUM_ENT_ENTRIES; i += 1) {
 			if (prev_info[i].pEntity != ent_info[i].pEntity) {
 				entities[i] = create_entity(process, i, ent_info[i].pEntity);
 			}
 			if (entities[i]) {
-				entities[i]->update(process, data);
+				entities[i]->update(process);
 			}
 		}
+	}
+
+	if (process.read_array(process.r5apex_exe + data::NAME_LIST, player_ptrs2.get(), MAX_PLAYERS)) {
+		char name_buf[128];
+		std::swap(player_ptrs2, player_ptrs1);
+		for (size_t i = 0; i < MAX_PLAYERS; i += 1) {
+			// Lazily update names as they change
+			if (player_ptrs1[i].name1 != player_ptrs2[i].name1) {
+				if (process.read(player_ptrs1[i].name1, name_buf)) {
+					player_names[i].assign(name_buf);
+				}
+			}
+		}
+	}
+
+	if (connected) {
+		load_string_table(weapon_names, process, data::NST_WEAPON_NAMES);
 	}
 }
 
@@ -83,8 +136,11 @@ static bool get_class_name(const GameProcess& process, uint64_t entity_ptr, char
 }
 
 std::unique_ptr<BaseEntity> GameState::create_entity(const GameProcess& process, uint32_t index, uint64_t entity_ptr) {
+	if (entity_ptr == 0) {
+		return {};
+	}
 	// When the hack is running before the game has decrypted itself, these contain bad addresses
-	if (entity_ptr == 0 || (entity_ptr & 0x7) != 0 || entity_ptr >= (1LL << 48)) {
+	if ((entity_ptr & 0x7) != 0 || entity_ptr >= (1ULL << 48)) {
 		return {};
 	}
 	char class_buffer[128];
@@ -94,15 +150,14 @@ std::unique_ptr<BaseEntity> GameState::create_entity(const GameProcess& process,
 	if (!strcmp(class_buffer, "CPlayer")) {
 		return std::make_unique<PlayerEntity>(entity_ptr);
 	}
+	if (!strcmp(class_buffer, "CAI_BaseNPC")) {
+		return std::make_unique<BaseNPCEntity>(entity_ptr);
+	}
 	if (!strcmp(class_buffer, "CPropSurvival")) {
 		return std::make_unique<PropSurvivalEntity>(entity_ptr);
 	}
 	if (!strcmp(class_buffer, "CWeaponX")) {
 		return std::make_unique<WeaponXEntity>(entity_ptr);
-	}
-	if (!strcmp(class_buffer, "CPlayerResource")) {
-		resources_entity = EHandle{index};
-		return std::make_unique<PlayerResourceEntity>(entity_ptr);
 	}
 	if (!strcmp(class_buffer, "CWorld")) {
 		return std::make_unique<WorldEntity>(entity_ptr);

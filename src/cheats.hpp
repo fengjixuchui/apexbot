@@ -2,6 +2,7 @@
 
 #include "highlight.hpp"
 #include "aimassist.hpp"
+#include "scripts.hpp"
 
 class GameContext;
 
@@ -10,7 +11,8 @@ class CheatManager {
 public:
 	CheatManager() = default;
 	void run(GameContext& ctx);
-private:
+public:
 	Highlight highlight;
 	AimAssist aimassist;
+	Scripts scripts;
 };

@@ -2,54 +2,67 @@
 
 #include <cstdint>
 
-class GameData {
-public:
-	GameData() = default;
+namespace data {
+	const uint32_t TIME_DATE_STAMP = 0x5f7e603a;
+	const uint32_t CHECKSUM = 0x1fc86ea;
 
-	uint32_t time_date_stamp = 0x5de73ec3;
-	uint32_t checksum = 0x1f20056;
+	const uint32_t GLOBAL_VARS = 0x1261c80;
 
-	uint32_t client_state = 0x1110c10;
-	uint32_t signon_state = 0x1110ca8;
-	uint32_t level_name = 0x1110dc8;
+	const uint32_t ENTITY_LIST = 0x18ad3a8;
+	const uint32_t LOCAL_ENTITY = 0x1191ebc;
 
-	uint32_t view_render = 0xcab13f8;
-	uint32_t view_matrix = 0x1a93d0;
-	uint32_t global_vars = 0x1110910;
+	const uint32_t CLIENT_STATE = 0x1261f80;
+	const uint32_t CLIENT_SIGNON_STATE = 0x0098;
+	const uint32_t CLIENT_LEVEL_NAME = 0x01b0;
 
-	uint32_t input_system = 0x117f680;
-	uint32_t input_button_state = 0xb0;
+	const uint32_t NST_WEAPON_NAMES = 0x040d5558;
 
-	uint32_t local_entity = 0x1039934;
-	uint32_t entity_list = 0x183f118;
+	const uint32_t VIEW_RENDER = 0x40d5e18;
+	const uint32_t VIEW_MATRIX = 0x1b3bd0;
 
-	uint32_t entity_model_name = 0x0030;
-	uint32_t entity_flags = 0x0098;
-	uint32_t entity_origin = 0x014c;
-	uint32_t entity_team_num = 0x03f0;
-	uint32_t entity_velocity = 0x041c;
-	uint32_t entity_bones = 0x0ee0;
+	const uint32_t INPUT_SYSTEM = 0x012d6900;
+	const uint32_t INPUT_BUTTON_STATE = 0xb0;
 
-	uint32_t player_shields = 0x0170;
-	uint32_t player_health = 0x03e0;
-	uint32_t player_max_health = 0x0510;
-	uint32_t player_life_state = 0x0730;
-	uint32_t player_zoom_state = 0x1880;
-	uint32_t player_camera_data = 0x1b64;
-	uint32_t player_bleedout_state = 0x2348;
-	uint32_t player_observer_mode = 0x2f3c;
-	uint32_t player_helmet_armor_type = 0x3e64;
-	uint32_t player_latest_primary_weapons = 0x1704;
+	const uint32_t NAME_LIST = 0x8167c30;
 
-	uint32_t weaponx_weapon_owner = 0x1300;
-	uint32_t weaponx_player_data_zoom_fov = 0x1368 + 0x00b0;
-	uint32_t weaponx_weapon_name_index = 0x14a8;
-	uint32_t weaponx_projectile_speed = 0x1ad0;
+	const uint32_t IN_ATTACK = 0x040d5ee8;
+	const uint32_t IN_JUMP = 0x040d5f60;
+	const uint32_t IN_RELOAD = 0x040d5f08;
 
-	uint32_t prop_survival = 0x1304;
+	const uint32_t ENTITY_MODEL_NAME = 0x0030;
+	const uint32_t ENTITY_FLAGS = 0x0098;
+	const uint32_t ENTITY_ORIGIN = 0x014c;
+	const uint32_t ENTITY_SHIELDS = 0x0170;
+	const uint32_t ENTITY_HEALTH = 0x0420;
+	const uint32_t ENTITY_TEAM_NUM = 0x0430;
+	const uint32_t ENTITY_VELOCITY = 0x0460;
+	const uint32_t ENTITY_MAX_HEALTH = 0x0550;
+	const uint32_t ENTITY_SIGNIFIER_NAME = 0x0558;
+	const uint32_t ENTITY_LIFE_STATE = 0x0770;
 
-	uint32_t player_resources = 0xcad2248;
-	uint32_t player_resource_names = 0x0a00;
+	const uint32_t ANIMATING_BONE_ARRAY = 0xF18;
+	const uint32_t ANIMATING_STUDIOHDR = 0x1110;
 
-	uint32_t world_death_field = 0x0a40;
+	const uint32_t BCC_LATEST_PRIMARY_WEAPONS = 0x1a0c;
+	const uint32_t BCC_LAST_VISIBLE_TIME = 0x1a6c;
+
+	const uint32_t PLAYER_ZOOM_STATE = 0x1b80;
+	const uint32_t PLAYER_CAMERA_DATA = 0x1e6c;
+	const uint32_t PLAYER_BLEEDOUT_STATE = 0x2610;
+	const uint32_t PLAYER_OBSERVER_MODE = 0x32bc;
+	const uint32_t PLAYER_HELMET_ARMOR_TYPE = 0x4274;
+
+	const uint32_t WEAPONX_WEAPON_OWNER = 0x1600;
+	const uint32_t WEAPONX_NEXT_PRIMARY_ATTACK = 0x160c;
+	const uint32_t WEAPONX_AMMO_IN_CLIP = 0x1634;
+	const uint32_t WEAPONX_PLAYER_DATA_ZOOM_FOV = 0x1668 + 0x00b4;
+	const uint32_t WEAPONX_MOD_BITFIELD = 0x1794;
+	const uint32_t WEAPONX_WEAPON_NAME_INDEX = 0x17b0;
+	const uint32_t WEAPONX_PROJECTILE_SPEED = 0x1e0c;
+
+	const uint32_t VEHICLE_DRIVER = 0x1984;
+	const uint32_t VEHICLE_VELOCITY = 0x19c0;
+
+	const uint32_t PROP_SURVIVAL = 0x1604;
+	const uint32_t WORLD_DEATH_FIELD = 0x0a80;
 };

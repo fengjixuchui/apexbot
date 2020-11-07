@@ -1,32 +1,34 @@
-#include "items.hpp"
 #include "data.hpp"
-#include "sdk.hpp"
-#include "entities.hpp"
 #include "process.hpp"
 #include "state.hpp"
 #include "cheats.hpp"
 #include "context.hpp"
+#include "config.hpp"
 
-void apex_legends(uint32_t pid) {
+void apexbot(uint32_t pid) {
 	// Attach to the process
 	const GameProcess process{pid};
+	if (process.r5apex_exe == 0) {
+		return;
+	}
 	// Initialize the game's offsets data
-	static const GameData data{};
 	// Check if the offsets are valid for this game version
-	if (process.check_version(data.time_date_stamp, data.checksum)) {
+	if (process.check_version(data::TIME_DATE_STAMP, data::CHECKSUM)) {
 		GameState state{};
 		CheatManager cheats{};
+		Config config{};
 		// The heart of the cheat is simple, repeat until the process dies
 		while (process.heartbeat()) {
 			// Update our copy of the game state
-			state.update(process, data);
+			state.update(process);
+			// Reload the weapon config
+			config.run(state, cheats);
 			// Run the cheat modules
-			GameContext ctx{process, data, state};
+			GameContext ctx{process, state};
+			ctx.pre();
 			cheats.run(ctx);
+			ctx.post();
 		}
-	}
-	else {
-		printf("apex(%d) Gamedata mismatch!\n", pid);
 	}
 }
 
@@ -35,7 +37,7 @@ int main(int argc, char* argv[]) {
 	(void)argv;
 	init_time();
 	// Track the last attached process id to prevent reattaching accidentally
-	uint32_t last_process_id = 0;
+	uint32_t last_process_id = ~0U;
 	while (true) {
 		bool seen_last_process_id = false;
 		ProcessEntry entry;
@@ -46,8 +48,8 @@ int main(int argc, char* argv[]) {
 				continue;
 			}
 			// Find the Apex Legends process
-			if (!wcscmp(entry.name, L"r5apex.exe")) {
-				apex_legends(entry.id);
+			if (!wcscmp(entry.name, PROCESS_NAME)) {
+				apexbot(entry.id);
 				last_process_id = entry.id;
 				seen_last_process_id = true;
 				break;
@@ -55,7 +57,7 @@ int main(int argc, char* argv[]) {
 		}
 		// Clear the last process id if it hasn't been seen
 		if (!seen_last_process_id) {
-			last_process_id = 0;
+			last_process_id = ~0;
 		}
 		// Wait before looking again
 		sleep(100);

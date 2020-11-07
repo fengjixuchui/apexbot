@@ -29,21 +29,25 @@ enum class ButtonCode: uint32_t {
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/master/mp/src/public/globalvars_base.h
 struct CGlobalVars {
-	double realtime;
-	int32_t framecount;
-	float absoluteframetime;
-	float curtime;
-	float frametime;
-	int32_t maxClients;
-	int32_t tickcount;
-	float interval_per_tick;
-	float interpolation_amount;
-	int32_t simTicksThisFrame;
-	int32_t network_protocol;
-	uint64_t pSaveData;
-	bool m_bClient;
-	int32_t nTimestampNetworkingBase;
-	int32_t nTimestampRandomizeWindow;
+	/*0x00*/double realtime;
+	/*0x08*/int32_t framecount;
+	/*0x0c*/float absoluteframetime;
+	/*0x10*/float curtime;
+	/*0x14*/float curtime2;
+	/*0x18*/float curtime3;
+	/*0x1c*/float curtime4;
+	/*0x20*/float frametime;
+	/*0x24*/float curtime5;
+	/*0x28*/float curtime6;
+	/*0x2c*/float zero;
+	/*0x30*/float frametime2;
+	/*0x34*/int32_t maxClients;
+	/*0x38*/int32_t unk38;
+	/*0x3c*/int32_t unk3C;
+	/*0x40*/int32_t tickcount;
+	/*0x44*/float interval_per_tick;
+	/*0x48*/float interpolation_amount;
+	// There's more stuff after this but I don't know and I don't care
 };
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/master/mp/src/game/shared/entitylist_base.h#L20-L29
@@ -65,6 +69,12 @@ struct ClientClass {
 	uint32_t ClassSize;
 };
 
+// https://github.com/ValveSoftware/source-sdk-2013/blob/master/mp/src/game/client/kbutton.h
+struct kbutton_t {
+	int down[2];
+	int state;
+};
+
 inline float rad2deg(float rad) {
 	return rad * 180.0f / 3.1415927f;
 }
@@ -75,7 +85,7 @@ inline float deg2rad(float deg) {
 struct Vec3 {
 	float x, y, z;
 
-	static inline float distance(Vec3 lhs, Vec3 rhs) {
+	inline static float distance(Vec3 lhs, Vec3 rhs) {
 		Vec3 delta = Vec3{rhs.x - lhs.x, rhs.y - lhs.y, rhs.z - lhs.z};
 		return sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
 	}
@@ -122,10 +132,60 @@ union FloatInt {
 
 const size_t NUM_ENT_ENTRIES = 0x10000;
 const size_t MAXSTUDIOBONES = 128;
+const size_t MAX_PLAYERS = 128;
 
 struct EHandle {
 	uint32_t value = 0xffffffff;
 
 	inline bool is_valid() const { return value != 0xffffffff; }
 	inline size_t index() const { return value & static_cast<uint32_t>(NUM_ENT_ENTRIES - 1); }
+};
+
+struct NameEntry {
+	uint64_t name1;
+	uint64_t name2; // For whatever reason there's two name entries...
+};
+
+struct CNetStringTableItem {
+	/*0x00*/ uint64_t unk00;
+	/*0x08*/ uint64_t unk08;
+	/*0x10*/ uint64_t string;
+	/*0x18*/ uint64_t unk18;
+	/*0x20*/ uint64_t unk20;
+	/*0x28*/ uint64_t unk28;
+	/*0x30*/ uint64_t unk30;
+	/*0x38*/ uint64_t unk38;
+	/*0x40*/ uint64_t unk40;
+};
+struct CNetStringDict {
+	/*0x00*/ uint64_t vtable;
+	/*0x08*/ uint64_t _unk08;
+	/*0x10*/ uint64_t _unk10;
+	/*0x18*/ uint64_t elements;
+	/*0x20*/ uint16_t allocation_count;
+	/*0x22*/ uint16_t grow_size;
+	/*0x24*/ uint32_t _unk24;
+	/*0x28*/ uint64_t _unk28;
+	/*0x30*/ uint16_t _unk30;
+	/*0x32*/ uint16_t used;
+	/*0x34*/ uint16_t _unk34;
+	/*0x36*/ uint16_t highest;
+};
+struct CNetStringTable {
+	/*0x00*/ uint64_t vtable;
+	/*0x08*/ int32_t table_id;
+	/*0x0c*/ uint32_t table_id_pad;
+	/*0x10*/ uint64_t table_name;
+	/*0x18*/ int32_t max_entries;
+	/*0x1c*/ int32_t entry_bits;
+	/*0x20*/ int32_t tick_count;
+	/*0x24*/ int32_t last_changed_tick;
+	/*0x28*/ uint32_t flags;
+	/*0x2c*/ int32_t user_data_size;
+	/*0x30*/ int32_t user_data_size_bits;
+	/*0x34*/ uint32_t pad;
+	/*0x38*/ uint64_t change_func;
+	/*0x40*/ uint64_t object;
+	/*0x48*/ uint64_t items;
+	/*0x50*/ uint64_t items_client_side;
 };

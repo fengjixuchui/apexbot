@@ -73,12 +73,22 @@ const wchar_t* get_mapped_file_name(uint32_t pid, uint64_t address, void* buffer
 //----------------------------------------------------------------
 
 GameProcess::GameProcess(uint32_t pid) : pid(pid) {
-	printf("apex(%d) Attached!\n", pid);
-	r5apex_exe = get_module_base(L"r5apex.exe");
-	printf("apex(%d) 0x%" PRIx64 " r5apex.exe\n", pid, r5apex_exe);
+	printf("apex(%u) Attached!\n", pid);
+	r5apex_exe = get_module_base(PROCESS_NAME);
+	printf("apex(%u) 0x%" PRIx64 " %S\n", pid, r5apex_exe, PROCESS_NAME);
+	if (r5apex_exe == 0)
+	{
+		if (sizeof(size_t) != 8) {
+			// When running a 32-bit build the previous may succeed but unable to scan the address space
+			printf("apex(%u) Running x86 build, did you mean to build as x86_64 instead?\n", pid);
+		}
+		else {
+			printf("apex(%u) Unable to find %S, incomplete EAC bypass?\n", pid, PROCESS_NAME);
+		}
+	}
 }
 GameProcess::~GameProcess() {
-	printf("apex(%d) Detached!\n", pid);
+	printf("apex(%u) Detached!\n", pid);
 }
 
 bool GameProcess::heartbeat() const {
@@ -86,10 +96,13 @@ bool GameProcess::heartbeat() const {
 	return read(r5apex_exe, dummy);
 }
 uint64_t GameProcess::get_module_base(const wchar_t* module_name) const {
-	MEMORY_BASIC_INFORMATION mbi;
+	MEMORY_BASIC_INFORMATION mbi{};
 	wchar_t buffer[MAX_PATH];
-	for (uint64_t address = 0; virtual_query_ex(pid, address, mbi); address += mbi.RegionSize) {
+	uint64_t address = 0;
+	while (true) {
+		// Look for mapped images
 		if (mbi.State == MEM_COMMIT && mbi.Type == MEM_IMAGE) {
+			// Find the image matching the module name
 			if (const auto path = get_mapped_file_name(pid, address, buffer, sizeof(buffer))) {
 				size_t offset = 0;
 				for (size_t i = 0; path[i] != L'\0'; i += 1) {
@@ -103,6 +116,16 @@ uint64_t GameProcess::get_module_base(const wchar_t* module_name) const {
 				}
 			}
 		}
+		// Look for the next allocation
+		const auto allocation_base = mbi.AllocationBase;
+		do {
+			address += mbi.RegionSize;
+			// Returns false once we reach the end of the virtual user address space
+			if (!virtual_query_ex(pid, address, mbi)) {
+				return 0;
+			}
+		}
+		while (mbi.AllocationBase == NULL || mbi.AllocationBase == allocation_base);
 	}
 	return 0;
 }
@@ -113,18 +136,38 @@ bool GameProcess::write_raw(uint64_t address, const void* buffer, size_t size) c
 	return write_process_memory(pid, address, buffer, size);
 }
 bool GameProcess::check_version(uint32_t time_date_stamp, uint32_t checksum) const {
+	// Sanity check the image base address...
+	if (r5apex_exe == 0 || (r5apex_exe & 0xfff) != 0) {
+		printf("apex(%u) Invalid image base: perhaps your bypass is incomplete.\n", pid);
+		return false;
+	}
+
 	IMAGE_DOS_HEADER dos_header;
 	IMAGE_NT_HEADERS64 nt_headers;
 	if (!(read(r5apex_exe, dos_header) && read(r5apex_exe + dos_header.e_lfanew, nt_headers))) {
+		printf("apex(%u) Error reading headers: incorrect image base, broken bypass or other issue!\n", pid);
+		return false;
+	}
+
+	// Sanity check the image magic values...
+	if (
+		dos_header.e_magic != IMAGE_DOS_SIGNATURE ||
+		nt_headers.Signature != IMAGE_NT_SIGNATURE ||
+		nt_headers.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC
+	) {
+		printf("apex(%u) Incorrect magic values: the image base address is incorrect!\n", pid);
 		return false;
 	}
 
 	// If TimeDateStamp and CheckSum match then our offsets are probably up-to-date
+	// This can also happen if the base address points to the wrong image in memory
 	if (nt_headers.FileHeader.TimeDateStamp == time_date_stamp && nt_headers.OptionalHeader.CheckSum == checksum) {
 		return true;
 	}
+	printf("apex(%u) Gamedata mismatch! Please update the offsets.\n", pid);
 
 	// Wait a minute to give the game a chance to decrypt itself
+	printf("apex(%u) Proceeding to dump the game executable in ~1 minute.\n", pid);
 	sleep(1000 * 60);
 
 	// Dump the game binary from memory
@@ -135,9 +178,9 @@ bool GameProcess::check_version(uint32_t time_date_stamp, uint32_t checksum) con
 		auto pnt_headers = reinterpret_cast<PIMAGE_NT_HEADERS64>(target.get() + dos_header.e_lfanew);
 		auto section_headers = reinterpret_cast<PIMAGE_SECTION_HEADER>(
 			target.get() +
-			dos_header.e_lfanew +
-			FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader) +
-			nt_headers.FileHeader.SizeOfOptionalHeader);
+			static_cast<size_t>(dos_header.e_lfanew) +
+			static_cast<size_t>(FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader)) +
+			static_cast<size_t>(nt_headers.FileHeader.SizeOfOptionalHeader));
 		for (size_t i = 0; i < nt_headers.FileHeader.NumberOfSections; i += 1) {
 			auto& section = section_headers[i];
 			// Rewrite the file offsets to the virtual addresses
@@ -152,16 +195,20 @@ bool GameProcess::check_version(uint32_t time_date_stamp, uint32_t checksum) con
 			}
 		}
 
-		const auto dump_file = CreateFileW(L"r5apex.dump", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_COMPRESSED, NULL);
+		const auto dump_file = CreateFileW(L"r5apex.bin", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_COMPRESSED, NULL);
 		if (dump_file != INVALID_HANDLE_VALUE) {
 			if (!WriteFile(dump_file, target.get(), static_cast<DWORD>(target_len), NULL, NULL)) {
-				printf("apex(%d) Error writing r5apex.dump: %d\n", pid, GetLastError());
+				printf("apex(%u) Error writing r5apex.bin: %u\n", pid, GetLastError());
 			}
 			CloseHandle(dump_file);
 		}
 		else {
-			printf("apex(%d) Error writing r5apex.dump: %d\n", pid, GetLastError());
+			printf("apex(%u) Error writing r5apex.bin: %u\n", pid, GetLastError());
 		}
+		printf("apex(%u) Wrote r5apex.bin!\n", pid);
+	}
+	else {
+		printf("apex(%u) Error reading the image from memory!\n", pid);
 	}
 
 	return false;
